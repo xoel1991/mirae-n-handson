@@ -2,12 +2,21 @@ package com.example.item;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ItemRepository extends JpaRepository<Item, Integer> {
+public interface ItemRepository extends JpaRepository<Item, Integer>, JpaSpecificationExecutor<Item> {
+
+    /** 조건 검색(페이지) — 단원을 함께 가져온다. 태그는 트랜잭션 안에서 지연 로딩(페이지당 최대 20건). */
+    @Override
+    @EntityGraph(attributePaths = {"unit"})
+    Page<Item> findAll(Specification<Item> spec, Pageable pageable);
 
     /** 단건 조회 — 단원 · 태그를 함께 가져온다(OSIV 꺼져 있음). */
     @EntityGraph(attributePaths = {"unit", "tags"})

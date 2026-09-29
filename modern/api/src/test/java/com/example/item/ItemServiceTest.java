@@ -2,6 +2,7 @@ package com.example.item;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,10 +14,16 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.util.LinkedMultiValueMap;
 
 @ExtendWith(MockitoExtension.class)
 @ActiveProfiles("test")
@@ -83,5 +90,43 @@ class ItemServiceTest {
             .isInstanceOf(NotFoundException.class)
             .hasMessageContaining("M9-9");
         verify(itemRepository, never()).findByUnitCodeAndStatus(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("searchItems: 행은 id · title · unit · level · tags 로 바뀌고, 건수는 전체 건수다")
+    @SuppressWarnings("unchecked")
+    void searchItemsMapsRowsAndTotalCount() {
+        Item item = ItemFixtures.item(12, unit, "대분수의 덧셈", 3,
+            ItemStatus.ACTIVE, ItemFixtures.tag(1, "계산"), ItemFixtures.tag(4, "오답률높음"));
+        ItemSearchCondition condition = ItemSearchCondition.from(new LinkedMultiValueMap<>());
+        long total = 21;
+        when(itemRepository.findAll(any(Specification.class), any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(item), condition.toPageable(), total));
+
+        ItemSearchResponse response = itemService.searchItems(condition);
+
+        assertThat(response.count()).isEqualTo(total);
+        assertThat(response.message()).isNull();
+        assertThat(response.rows()).containsExactly(
+            new ItemSearchRow(12, "대분수의 덧셈", "M5-1", 3, List.of("계산", "오답률높음")));
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(itemRepository).findAll(any(Specification.class), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(ItemSearchCondition.PAGE_SIZE);
+    }
+
+    @Test
+    @DisplayName("searchItems: 0건이면 오류 없이 안내 문구를 돌려준다")
+    @SuppressWarnings("unchecked")
+    void searchItemsReturnsNoResultMessageWhenEmpty() {
+        ItemSearchCondition condition = ItemSearchCondition.from(new LinkedMultiValueMap<>());
+        when(itemRepository.findAll(any(Specification.class), any(Pageable.class)))
+            .thenReturn(Page.empty(condition.toPageable()));
+
+        ItemSearchResponse response = itemService.searchItems(condition);
+
+        assertThat(response.rows()).isEmpty();
+        assertThat(response.count()).isZero();
+        assertThat(response.message()).isEqualTo("검색 결과가 없습니다");
     }
 }

@@ -4,6 +4,7 @@ import com.example.common.NotFoundException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,5 +41,18 @@ public class ItemService {
             .toList();
         log.debug("unit {} has {} active items", unit.getCode(), items.size());
         return items;
+    }
+
+    /**
+     * 문항 검색 — 레거시 {@code search.php} 이관. 모르는 단원 · 태그, 범위 밖 난이도도 오류 없이 0건으로 돌려준다.
+     */
+    public ItemSearchResponse searchItems(ItemSearchCondition condition) {
+        Page<Item> page = itemRepository.findAll(ItemSearchSpecifications.of(condition), condition.toPageable());
+        List<ItemSearchRow> rows = page.getContent().stream()
+            .map(ItemSearchRow::from)
+            .toList();
+        log.debug("item search matched {} items, page {} has {} rows",
+            page.getTotalElements(), condition.page(), rows.size());
+        return ItemSearchResponse.of(rows, page.getTotalElements());
     }
 }

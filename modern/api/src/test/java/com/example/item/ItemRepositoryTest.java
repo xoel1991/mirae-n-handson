@@ -11,7 +11,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.data.domain.Page;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 /** 저장소 슬라이스 — H2(MariaDB 모드)에 실제 SQL 을 날린다. */
 @DataJpaTest(showSql = false)
@@ -79,5 +82,71 @@ class ItemRepositoryTest {
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.ACTIVE)).isEqualTo(3);
         assertThat(itemRepository.countByUnitIdAndStatus(fraction.getId(), ItemStatus.DELETED)).isEqualTo(1);
         assertThat(unitRepository.findByCode("M5-3")).isPresent();
+    }
+
+    private Page<Item> search(String... keyValues) {
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            params.add(keyValues[i], keyValues[i + 1]);
+        }
+        ItemSearchCondition condition = ItemSearchCondition.from(params);
+        return itemRepository.findAll(ItemSearchSpecifications.of(condition), condition.toPageable());
+    }
+
+    @Test
+    @DisplayName("검색 기본: 공개 문항 중 난이도 5 를 뺀 것만, level DESC · id ASC")
+    void searchDefaultExcludesLevel5AndNonPublic() {
+        Page<Item> page = search();
+
+        assertThat(page.getTotalElements()).isEqualTo(3);
+        assertThat(page.getContent()).extracting(Item::getTitle)
+            .containsExactly("분수 문장제", "분모가 같은 분수의 덧셈", "소수 곱셈");
+    }
+
+    @Test
+    @DisplayName("검색 난이도 5 명시: 공개 난이도 5 문항만")
+    void searchLevel5ReturnsOnlyLevel5() {
+        assertThat(search("level", "5").getContent()).extracting(Item::getTitle).containsExactly("난이도 5 분수");
+    }
+
+    @Test
+    @DisplayName("검색 범위 밖 난이도 · 모르는 단원: 오류 없이 0건")
+    void searchOutOfRangeReturnsEmpty() {
+        assertThat(search("level", "0").getTotalElements()).isZero();
+        assertThat(search("level", "99999999999999999999").getTotalElements()).isZero();
+        assertThat(search("unit", "X9-9").getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("검색 단원 · 태그 AND: 태그는 이름이 정확히 같은 것만, 태그는 id 순으로 로드")
+    void searchCombinesUnitAndTag() {
+        Page<Item> page = search("unit", "M5-1", "tag", "문장제");
+
+        assertThat(page.getContent()).extracting(Item::getTitle).containsExactly("분수 문장제");
+        assertThat(page.getContent().get(0).getTags()).extracting(Tag::getName).containsExactly("계산", "문장제");
+        assertThat(search("tag", "문장").getTotalElements()).isZero();
+    }
+
+    @Test
+    @DisplayName("검색 키워드: 제목 또는 지문 부분 일치")
+    void searchKeywordMatchesTitleOrStem() {
+        assertThat(search("q", "소수").getContent()).extracting(Item::getTitle).containsExactly("소수 곱셈");
+        assertThat(search("q", "문제 본문").getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("검색 정렬 unit desc: 단원 코드 내림차순, 같은 단원이면 level DESC")
+    void searchSortsByUnitDesc() {
+        assertThat(search("sort", "unit", "dir", "desc").getContent()).extracting(Item::getTitle)
+            .containsExactly("소수 곱셈", "분수 문장제", "분모가 같은 분수의 덧셈");
+    }
+
+    @Test
+    @DisplayName("검색 페이지가 전체보다 뒤면 행은 없고 전체 건수는 그대로")
+    void searchPageBeyondTotalKeepsCount() {
+        Page<Item> page = search("page", "2");
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isEqualTo(3);
     }
 }
