@@ -332,7 +332,7 @@ grep -nE 'Started .*Application|Start completed|Shutdown|Starting .*Application'
 | C1 | `ReportController.java:22` · `ReportService.java:41` | `return reportService.buildClassReport(id);` · `@Transactional` |
 | C2 | `ReportService.java:71` · `:23` · `:69-70` | `String signature = sign(payload.toString());` · `SIGNATURE_ROUNDS = 200_000` · `// TODO: 트랜잭션 밖으로` |
 | C3 | `app.log:1243` → `app.log:1259` | 14:37:52 `Connection leak detection triggered for …Connection@6e8f14d3` → 14:38:01 `Previously reported leaked connection …@6e8f14d3` |
-| C3 | 3.3 R1-1 · R1-2 (집계) | 누수 감지 134건, 호출 지점 134/134 `ReportService`, 점유 15~21초 |
+| C3 | `app.log:1243` ~ `app.log:5251` · `app.log:1253` (집계는 3.3 R1-1 · R1-2) | 첫 · 마지막 누수 감지 사이 134건, 스택 `ReportService$$SpringCGLIB$$0.buildClassReport` 134/134, 점유 15~21초 |
 | C4 | `nginx-access.log:18801` | 14:38:01 `"GET /api/classes/3/report HTTP/1.1" 200` (이후 분별 수는 3.3 R3-1) |
 | C5 | `app.log:1522` | `itembank-pool - Connection is not available, request timed out after 3000ms (total=5, active=5, idle=0, waiting=4)` |
 | C5 | `app.log:1523` · `nginx-access.log:18918` | `unhandled exception on /api/units/M6-2/items` · `"GET /api/units/M6-2/items HTTP/1.1" 500` |
